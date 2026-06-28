@@ -16,12 +16,10 @@
 // export const disconnectPrisma = async () => {
 //   await prisma.$disconnect();
 // };
-import prismaPkg from "@prisma/client";
+import { PrismaClient } from "@prisma/client";
 import "dotenv/config";
 
-const { PrismaClient } = prismaPkg;
-
-// Prisma natively supports your mysql:// connection string out of the box!
+// Initialize natively without any extra wrapper configuration blocks
 export const prisma = new PrismaClient();
 
 export const connectPrisma = async () => {
@@ -31,4 +29,3 @@ export const connectPrisma = async () => {
 export const disconnectPrisma = async () => {
   await prisma.$disconnect();
 };
-
