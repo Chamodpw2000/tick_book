@@ -1,0 +1,62 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Event {
+  id                Int                 @id @default(autoincrement())
+  venueId           String
+  title       String
+  description String?
+  category          String?
+  startTime         DateTime
+  endTime           DateTime
+  status            String              @default("draft")
+  bannerUrl         String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  eventArtists      EventArtist[]
+  eventTicketTypes  EventTicketType[]
+
+  @@index([venueId])
+}
+
+model EventArtist {
+  id        Int      @id @default(autoincrement())
+  eventId   Int
+  artistId  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  event Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, artistId])
+  @@index([eventId])
+  @@index([artistId])
+}
+
+model EventTicketType {
+  id          Int             @id @default(autoincrement())
+  eventId     Int
+  initialStock Int
+  name        String
+  price       Decimal         @db.Decimal(10, 2)
+  currency    String          @default("USD")
+  description String?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  event              Event            @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@index([eventId])
+}
+

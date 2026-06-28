@@ -1,0 +1,68 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+model Payment {
+  id                Int                  @id @default(autoincrement())
+  bookingId         Int
+  userId            String
+  eventId           Int
+  amount            Decimal              @db.Decimal(10, 2)
+  currency          String
+  paymentMethod     String
+  providerName      String
+  providerReference String?
+  status            String
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  transactions      PaymentTransaction[]
+  refunds           Refund[]
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([eventId])
+  @@index([status])
+  @@index([providerReference])
+}
+
+model PaymentTransaction {
+  id                Int      @id @default(autoincrement())
+  paymentId         Int
+  transactionType   String
+  providerReference String?
+  status            String
+  createdAt         DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([transactionType])
+  @@index([status])
+  @@index([providerReference])
+}
+
+model Refund {
+  id        Int      @id @default(autoincrement())
+  paymentId Int      @unique
+  bookingId Int
+  amount    Decimal  @db.Decimal(10, 2)
+  reason    String?
+  status    String
+  createdAt DateTime @default(now())
+
+  payment Payment @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+
+  @@index([paymentId])
+  @@index([bookingId])
+  @@index([status])
+}

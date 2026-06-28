@@ -1,0 +1,111 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Get a free hosted Postgres database in seconds: `npx create-db`
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  CANCELLED
+  EXPIRED
+}
+
+enum TicketStatus {
+  ISSUED
+  USED
+  CANCELLED
+}
+
+model Booking {
+  id               Int                    @id @default(autoincrement())
+  userId           String
+  eventId          Int
+  bookingReference String                 @unique @db.VarChar(100)
+  status           BookingStatus          @default(PENDING)
+  totalAmount      Decimal                @db.Decimal(10, 2)
+  currency         String                 @db.VarChar(3)
+  paymentStatus    String                 @db.VarChar(50)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  items            BookingItem[]
+  statusHistory    BookingStatusHistory[]
+  tickets          Ticket[]
+
+  @@index([userId])
+  @@index([eventId])
+}
+
+model BookingItem {
+  id           Int      @id @default(autoincrement())
+  bookingId    Int
+  ticketTypeId Int
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  subtotal     Decimal  @db.Decimal(10, 2)
+  booking      Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([ticketTypeId])
+}
+
+model BookingStatusHistory {
+  id        Int           @id @default(autoincrement())
+  bookingId Int
+  oldStatus BookingStatus
+  newStatus BookingStatus
+  changedAt DateTime      @default(now())
+  reason    String?       @db.VarChar(255)
+  booking   Booking       @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+}
+
+model Ticket {
+  id                  Int                   @id @default(autoincrement())
+  bookingId           Int
+  userId              String
+  eventId             Int
+  ticketCode          String                @unique @db.VarChar(120)
+  ticketTypeId        Int
+  ticketStatus        TicketStatus          @default(ISSUED)
+  issuedAt            DateTime              @default(now())
+  booking             Booking               @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  files               TicketFile[]
+  validationLogs      TicketValidationLog[]
+
+  @@index([bookingId])
+  @@index([userId])
+  @@index([eventId])
+  @@index([ticketTypeId])
+}
+
+model TicketFile {
+  id        Int      @id @default(autoincrement())
+  ticketId  Int
+  fileType  String   @db.VarChar(50)
+  s3Url     String   @db.VarChar(500)
+  createdAt DateTime @default(now())
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model TicketValidationLog {
+  id          Int      @id @default(autoincrement())
+  ticketId    Int
+  validatedAt DateTime @default(now())
+  validatedBy String   @db.VarChar(120)
+  result      String   @db.VarChar(60)
+  ticket      Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}

@@ -1,0 +1,55 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+}
+
+enum InventoryHoldStatus {
+  ACTIVE
+  EXPIRED
+  RELEASED
+  CONFIRMED
+}
+
+model EventInventory {
+  id               Int      @id @default(autoincrement())
+  eventId          Int
+  ticketTypeId     Int
+  totalQuantity    Int
+  availableQuantity Int
+  reservedQuantity Int      @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  holds            InventoryHold[]
+
+  @@unique([eventId, ticketTypeId])
+  @@index([eventId])
+  @@index([ticketTypeId])
+}
+
+model InventoryHold {
+  id           Int                 @id @default(autoincrement())
+  inventoryId  Int
+  eventId      Int
+  ticketTypeId Int
+  bookingId    Int?
+  userId       String
+  quantity     Int
+  status       InventoryHoldStatus @default(ACTIVE)
+  expiresAt    DateTime
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  inventory    EventInventory      @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+
+  @@index([inventoryId])
+  @@index([eventId])
+  @@index([ticketTypeId])
+  @@index([bookingId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+

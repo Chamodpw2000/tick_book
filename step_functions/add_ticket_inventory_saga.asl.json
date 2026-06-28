@@ -1,0 +1,132 @@
+{
+  "Comment": "Create ticket type and inventory with compensation on inventory failure",
+  "StartAt": "Add Ticket",
+  "States": {
+    "Add Ticket": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:AddEventTicketType:$LATEST",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.addTicketResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.addTicketError",
+          "Next": "Add Ticket Failed"
+        }
+      ],
+      "Next": "Prepare Inventory Input"
+    },
+    "Prepare Inventory Input": {
+      "Type": "Pass",
+      "Parameters": {
+        "eventId.$": "$.eventId",
+        "name.$": "$.name",
+        "price.$": "$.price",
+        "currency.$": "$.currency",
+        "description.$": "$.description",
+        "initialStock.$": "$.initialStock",
+        "totalQuantity.$": "$.totalQuantity",
+        "ticketTypeId.$": "$.addTicketResult.Payload.ticketTypeId"
+      },
+      "ResultPath": "$",
+      "Next": "Add Inventory Record"
+    },
+    "Add Inventory Record": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:AddEventTicketInventoryRecord:$LATEST",
+        "Payload.$": "$"
+      },
+      "ResultPath": "$.addInventoryResult",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.addInventoryError",
+          "Next": "Delete Ticket Compensation"
+        }
+      ],
+      "Next": "Success"
+    },
+    "Delete Ticket Compensation": {
+      "Type": "Task",
+      "Resource": "arn:aws:states:::lambda:invoke",
+      "Parameters": {
+        "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:removeTicket:$LATEST",
+        "Payload": {
+          "ticketTypeId.$": "$.ticketTypeId"
+        }
+      },
+      "ResultPath": "$.deleteTicketCompensation",
+      "Retry": [
+        {
+          "ErrorEquals": [
+            "Lambda.ServiceException",
+            "Lambda.AWSLambdaException",
+            "Lambda.SdkClientException",
+            "Lambda.TooManyRequestsException"
+          ],
+          "IntervalSeconds": 1,
+          "MaxAttempts": 3,
+          "BackoffRate": 2
+        }
+      ],
+      "Catch": [
+        {
+          "ErrorEquals": [
+            "States.ALL"
+          ],
+          "ResultPath": "$.deleteTicketCompensationError",
+          "Next": "Saga Failed"
+        }
+      ],
+      "Next": "Saga Failed"
+    },
+    "Add Ticket Failed": {
+      "Type": "Fail",
+      "Error": "AddTicketFailed",
+      "Cause": "Ticket creation failed"
+    },
+    "Saga Failed": {
+      "Type": "Fail",
+      "Error": "InventoryCreateFailedCompensated",
+      "Cause": "Inventory record creation failed and ticket compensation was attempted"
+    },
+    "Success": {
+      "Type": "Succeed"
+    }
+  }
+}

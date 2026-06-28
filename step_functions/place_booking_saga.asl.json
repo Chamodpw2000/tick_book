@@ -1,0 +1,137 @@
+{
+    "Comment": "Place booking (create booking, reserve inventory, cancel booking on reserve failure). Deploy as EXPRESS for synchronous StartSyncExecution.",
+    "StartAt": "Create Booking",
+    "States": {
+        "Create Booking": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:createBooking:$LATEST",
+                "Payload.$": "$"
+            },
+            "ResultPath": "$.createBookingResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.createBookingError",
+                    "Next": "Create Booking Failed"
+                }
+            ],
+            "Next": "Prepare Reserve Inventory Input"
+        },
+        "Prepare Reserve Inventory Input": {
+            "Type": "Pass",
+            "Parameters": {
+                "eventId.$": "$.eventId",
+                "userId.$": "$.userId",
+                "bookingId.$": "$.createBookingResult.Payload.bookingId",
+                "holdExpiryMinutes": 15,
+                "items.$": "$.items"
+            },
+            "ResultPath": "$",
+            "Next": "Reserve Inventory"
+        },
+        "Reserve Inventory": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:reserveInventory:$LATEST",
+                "Payload.$": "$"
+            },
+            "ResultPath": "$.reserveInventoryResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.reserveInventoryError",
+                    "Next": "Cancel Booking (Compensation)"
+                }
+            ],
+            "Next": "Return Booking Id"
+        },
+        "Cancel Booking (Compensation)": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:cancelBooking:$LATEST",
+                "Payload": {
+                    "bookingId.$": "$.bookingId"
+                }
+            },
+            "ResultPath": "$.cancelBookingResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.cancelBookingError",
+                    "Next": "Saga Failed"
+                }
+            ],
+            "Next": "Saga Failed"
+        },
+        "Return Booking Id": {
+            "Type": "Pass",
+            "Parameters": {
+                "bookingId.$": "$.bookingId"
+            },
+            "ResultPath": "$",
+            "Next": "Success"
+        },
+        "Create Booking Failed": {
+            "Type": "Fail",
+            "Error": "CreateBookingFailed",
+            "Cause": "Booking creation failed"
+        },
+        "Saga Failed": {
+            "Type": "Fail",
+            "Error": "ReserveInventoryFailedCompensated",
+            "Cause": "Inventory reservation failed and booking cancellation was attempted"
+        },
+        "Success": {
+            "Type": "Succeed"
+        }
+    }
+}

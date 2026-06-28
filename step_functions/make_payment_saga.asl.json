@@ -1,0 +1,265 @@
+{
+    "Comment": "Make payment saga (check availability, create payment, confirm booking; on failure compensate by refunding payment (if created), releasing inventory, and cancelling booking). Deploy as EXPRESS for synchronous StartSyncExecution.",
+    "StartAt": "Check Payment Availability",
+    "States": {
+        "Check Payment Availability": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:checkPaymentAvailability:$LATEST",
+                "Payload": {
+                    "bookingId.$": "$.bookingId"
+                }
+            },
+            "ResultPath": "$.checkPaymentAvailabilityResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.checkPaymentAvailabilityError",
+                    "Next": "Check Payment Availability Failed"
+                }
+            ],
+            "Next": "Is Payment Available?"
+        },
+        "Is Payment Available?": {
+            "Type": "Choice",
+            "Choices": [
+                {
+                    "Variable": "$.checkPaymentAvailabilityResult.Payload.availableForPayment",
+                    "BooleanEquals": true,
+                    "Next": "Prepare Make Payment Input"
+                }
+            ],
+            "Default": "Payment Not Available"
+        },
+        "Prepare Make Payment Input": {
+            "Type": "Pass",
+            "Parameters": {
+                "bookingId.$": "$.checkPaymentAvailabilityResult.Payload.booking.id",
+                "userId.$": "$.checkPaymentAvailabilityResult.Payload.booking.userId",
+                "eventId.$": "$.checkPaymentAvailabilityResult.Payload.booking.eventId",
+                "amount.$": "$.checkPaymentAvailabilityResult.Payload.booking.totalAmount",
+                "currency.$": "$.checkPaymentAvailabilityResult.Payload.booking.currency",
+                "paymentMethod.$": "$.paymentMethod",
+                "providerName.$": "$.providerName",
+                "providerReference.$": "$.providerReference",
+                "transactionType.$": "$.transactionType"
+            },
+            "ResultPath": "$.makePaymentInput",
+            "Next": "Make Payment"
+        },
+        "Make Payment": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:makePayment:$LATEST",
+                "Payload.$": "$.makePaymentInput"
+            },
+            "ResultPath": "$.makePaymentResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.makePaymentError",
+                    "Next": "Release Inventory (Compensation)"
+                }
+            ],
+            "Next": "Confirm Booking"
+        },
+        "Confirm Booking": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:confirmBooking:$LATEST",
+                "Payload": {
+                    "bookingId.$": "$.bookingId"
+                }
+            },
+            "ResultPath": "$.confirmBookingResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.confirmBookingError",
+                    "Next": "Refund Payment (Compensation)"
+                }
+            ],
+            "Next": "Return Payment Result"
+        },
+        "Refund Payment (Compensation)": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:refundPayment:$LATEST",
+                "Payload": {
+                    "paymentId.$": "$.makePaymentResult.Payload.paymentId"
+                }
+            },
+            "ResultPath": "$.refundPaymentResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.refundPaymentError",
+                    "Next": "Release Inventory (Compensation)"
+                }
+            ],
+            "Next": "Release Inventory (Compensation)"
+        },
+        "Release Inventory (Compensation)": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:releaseInventory:$LATEST",
+                "Payload": {
+                    "holdIds.$": "$.checkPaymentAvailabilityResult.Payload.holdIds"
+                }
+            },
+            "ResultPath": "$.releaseInventoryResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.releaseInventoryError",
+                    "Next": "Cancel Booking (Compensation)"
+                }
+            ],
+            "Next": "Cancel Booking (Compensation)"
+        },
+        "Cancel Booking (Compensation)": {
+            "Type": "Task",
+            "Resource": "arn:aws:states:::lambda:invoke",
+            "Parameters": {
+                "FunctionName": "arn:aws:lambda:us-east-1:512741504930:function:cancelBooking:$LATEST",
+                "Payload": {
+                    "bookingId.$": "$.bookingId"
+                }
+            },
+            "ResultPath": "$.cancelBookingResult",
+            "Retry": [
+                {
+                    "ErrorEquals": [
+                        "Lambda.ServiceException",
+                        "Lambda.AWSLambdaException",
+                        "Lambda.SdkClientException",
+                        "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                }
+            ],
+            "Catch": [
+                {
+                    "ErrorEquals": [
+                        "States.ALL"
+                    ],
+                    "ResultPath": "$.cancelBookingError",
+                    "Next": "Payment Saga Failed"
+                }
+            ],
+            "Next": "Payment Saga Failed"
+        },
+        "Return Payment Result": {
+            "Type": "Pass",
+            "Parameters": {
+                "bookingId.$": "$.makePaymentInput.bookingId",
+                "holdIds.$": "$.checkPaymentAvailabilityResult.Payload.holdIds",
+                "paymentId.$": "$.makePaymentResult.Payload.paymentId",
+                "payment.$": "$.makePaymentResult.Payload.payment",
+                "booking.$": "$.confirmBookingResult.Payload.booking"
+            },
+            "ResultPath": "$",
+            "Next": "Success"
+        },
+        "Payment Not Available": {
+            "Type": "Fail",
+            "Error": "PaymentNotAvailable",
+            "Cause": "Booking is not available for payment"
+        },
+        "Check Payment Availability Failed": {
+            "Type": "Fail",
+            "Error": "CheckPaymentAvailabilityFailed",
+            "Cause": "Payment availability check failed"
+        },
+        "Payment Saga Failed": {
+            "Type": "Fail",
+            "Error": "MakePaymentFailedCompensated",
+            "Cause": "Payment saga failed and compensation was attempted"
+        },
+        "Success": {
+            "Type": "Succeed"
+        }
+    }
+}
